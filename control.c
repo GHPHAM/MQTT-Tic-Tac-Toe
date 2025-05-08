@@ -1,3 +1,7 @@
+// control.c
+// Heavily based on control.sh
+// For Windows with Mosquitto client
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,7 +13,7 @@ char mosquittoPath[] = "C:\\Progra~2\\mosquitto\\mosquitto_pub.exe";
 char mosquittoSub[] = "C:\\Progra~2\\mosquitto\\mosquitto_sub.exe";
 
 // MQTT Configuration
-#define MQTT_HOST ""
+#define MQTT_HOST "" // You wouldn't believe how many time I had to rebase the repo to not dox myself
 #define MQTT_TOPIC "TTT"
 
 // Board state
