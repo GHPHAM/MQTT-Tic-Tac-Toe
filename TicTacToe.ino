@@ -22,6 +22,13 @@ const char* mqtt_password = "";                // Optional: MQTT password if req
 const char* clientID = "ESP32_TTT";            // Client ID for MQTT connection
 const char* topic_sub = "TTT";                 // Topic to subscribe to for game control
 
+// MQTT Topics for publishing
+const char* topic_board_state = "TTT/board";   // Topic for board state
+const char* topic_current_player = "TTT/player"; // Topic for current player
+const char* topic_game_status = "TTT/status";  // Topic for game status
+const char* topic_moves = "TTT/moves";         // Topic for moves
+const char* topic_score = "TTT/score";         // Topic for score
+
 // Initialize WiFi and MQTT client - GLOBAL DECLARATIONS
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -31,6 +38,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // Function declaration to prevent errors
 String getBoardStateString();
+void publishGameState();
 
 // Game variables
 char board[3][3] = {
@@ -49,14 +57,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  
+
   // Convert payload to string
   String message = "";
   for (int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
   Serial.println(message);
-  
+
   // Process the message if game is not over
   if (!gameOver) {
     // Check if the message is in the format "row,col"
@@ -64,7 +72,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (commaIndex > 0) {
       int row = message.substring(0, commaIndex).toInt();
       int col = message.substring(commaIndex + 1).toInt();
-      
+
       // Make the move (already converts to 0-indexed)
       makeMove(row - 1, col - 1);
     }
@@ -121,10 +129,10 @@ void setup() {
   }
   lcd.init();                     // LCD driver initialization
   lcd.backlight();                // Open the backlight
-  
+
   // Initialize the display
   updateScores();
-  
+
   Serial.begin(115200);
   Serial.println("Tic Tac Toe Game");
   Serial.println("Enter move as: row col (e.g., 1 2)");
@@ -150,15 +158,14 @@ void setup() {
   // Set MQTT server and callback function
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
-  
+
   // Initial connection to MQTT
   if (!client.connected()) {
     reconnect();
   }
-  
-  // Send game state on startup
-  String boardState = getBoardStateString();
-  client.publish("TTT/state", boardState.c_str());
+
+  // Send initial game state
+  publishGameState();
 }
 
 void loop() {
@@ -166,7 +173,7 @@ void loop() {
   if (!client.connected()) {
     reconnect();
   }
-  
+
   // Process MQTT messages
   client.loop();
 
@@ -178,13 +185,12 @@ void loop() {
   if (Serial.available() > 0) {
     int row = Serial.parseInt();
     int col = Serial.parseInt();
-    
-    
+
     // Clear any remaining characters in the buffer
     while (Serial.available() > 0) {
       Serial.read();
     }
-    
+
     // Process the move
     makeMove(row - 1, col - 1); // Convert to 0-indexed
   }
@@ -199,29 +205,28 @@ void makeMove(int row, int col) {
     lcd.print("COORD:");
     lcd.print(col);
     lcd.print(row);
-    
 
   // Check if move is valid
   if (row < 0 || row > 2 || col < 0 || col > 2) {
     Serial.println("Invalid move! Row and column must be 1, 2, or 3.");
     return;
   }
-  
+
   if (board[row][col] != ' ') {
     Serial.println("That position is already taken!");
     return;
   }
-  
+
   // Make the move
   board[row][col] = currentPlayer;
-  
+
   // Publish the move to MQTT
   String moveMessage = String(row + 1) + "," + String(col + 1) + "," + String(currentPlayer);
-  client.publish("TTT/moves", moveMessage.c_str());
-  
+  client.publish(topic_moves, moveMessage.c_str());
+
   // Print the updated board
   printBoard();
-  
+
   // Check if there's a winner
   if (checkWin()) {
     gameOver = true;
@@ -235,36 +240,76 @@ void makeMove(int row, int col) {
     if (winCount > 99){ // Reset the points once total wins is 100
       xWins = oWins = winCount = 0;
     }
-    
+
     updateScores();
-    
+
     Serial.print("Player ");
     Serial.print(currentPlayer);
     Serial.println(" wins!");
     Serial.println("Press 'r' to reset the game.");
-    
+
     // Publish win notification
     String winMessage = String(currentPlayer) + " wins";
-    client.publish("TTT/status", winMessage.c_str());
+    client.publish(topic_game_status, winMessage.c_str());
+
+    // Update board state one final time
+    publishGameState();
     return;
   }
-  
+
   // Check for a draw
   if (checkDraw()) {
     gameOver = true;
     Serial.println("Game is a draw!");
     Serial.println("Press 'r' to reset the game.");
-    
+
     // Publish draw notification
-    client.publish("TTT/status", "draw");
+    client.publish(topic_game_status, "draw");
+
+    // Update board state one final time
+    publishGameState();
     return;
   }
-  
+
   // Switch players
   currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
   Serial.print("Player ");
   Serial.print(currentPlayer);
   Serial.println("'s turn.");
+
+  // Publish updated game state
+  publishGameState();
+}
+
+// New function to publish the complete game state
+void publishGameState() {
+  // Publish board state
+  String boardState = getBoardStateString();
+  client.publish(topic_board_state, boardState.c_str());
+  Serial.println(boardState.c_str());
+
+  // Publish current player
+  String playerState = String(currentPlayer);
+  client.publish(topic_current_player, playerState.c_str());
+
+  // Publish formatted board state (more readable)
+  String formattedBoard = getFormattedBoardString();
+  client.publish("TTT/board_formatted", formattedBoard.c_str());
+}
+
+// Helper function to get a nicely formatted board representation
+String getFormattedBoardString() {
+  String formatted = "\n";
+  for (int i = 0; i < 3; i++) {
+    formatted += " ";
+    for (int j = 0; j < 3; j++) {
+      formatted += board[i][j];
+      if (j < 2) formatted += " | ";
+    }
+    formatted += "\n";
+    if (i < 2) formatted += "-----------\n";
+  }
+  return formatted;
 }
 
 boolean checkWin() {
@@ -274,23 +319,23 @@ boolean checkWin() {
       return true;
     }
   }
-  
+
   // Check columns
   for (int i = 0; i < 3; i++) {
     if (board[0][i] != ' ' && board[0][i] == board[1][i] && board[1][i] == board[2][i]) {
       return true;
     }
   }
-  
+
   // Check diagonals
   if (board[0][0] != ' ' && board[0][0] == board[1][1] && board[1][1] == board[2][2]) {
     return true;
   }
-  
+
   if (board[0][2] != ' ' && board[0][2] == board[1][1] && board[1][1] == board[2][0]) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -312,17 +357,17 @@ void resetGame() {
       board[i][j] = ' ';
     }
   }
-  
+
   currentPlayer = 'X';
   gameOver = false;
-  
+
   Serial.println("New game started!");
   Serial.println("Enter move as: row col (e.g., 1 2)");
   printBoard();
-  
-  // Publish reset notification
-  client.publish("TTT/state", getBoardStateString().c_str());
-  client.publish("TTT/status", "reset");
+
+  // Publish reset notification and updated game state
+  client.publish(topic_game_status, "reset");
+  publishGameState();
 }
 
 void updateScores() {
@@ -330,14 +375,14 @@ void updateScores() {
   lcd.setCursor(0, 0);
   lcd.print("X: ");
   lcd.print(xWins);
-  
+
   lcd.setCursor(0, 1);
   lcd.print("O: ");
   lcd.print(oWins);
-  
+
   // Also publish scores to MQTT
   String scoreMessage = "X:" + String(xWins) + ",O:" + String(oWins);
-  client.publish("TTT/score", scoreMessage.c_str());
+  client.publish(topic_score, scoreMessage.c_str());
 }
 
 String getBoardStateString() {
@@ -354,16 +399,16 @@ void printBoard() {
   Serial.println("\nCurrent board:");
   Serial.println("  1 2 3");
   Serial.println(" -------");
-  
+
   for (int i = 0; i < 3; i++) {
     Serial.print(i + 1);
     Serial.print("|");
-    
+
     for (int j = 0; j < 3; j++) {
       Serial.print(board[i][j]);
       Serial.print("|");
     }
-    
+
     Serial.println();
     Serial.println(" -------");
   }
