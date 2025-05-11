@@ -67,12 +67,21 @@ update_board() {
             if [[ "$message" == *"wins"* ]]; then
                 echo -e "${GREEN}Player $message!${NC}"
                 echo "Press Enter to continue..."
+                echo "Game reset."
+                last_board="         "
+                init_available_moves
                 read
             elif [[ "$message" == "draw" ]]; then
                 echo -e "${BLUE}Game ended in a draw!${NC}"
                 echo "Press Enter to continue..."
+                echo "Game reset."
+                last_board="         "
+                init_available_moves
                 read
             elif [[ "$message" == "reset" ]]; then
+                echo "Game reset."
+                last_board="         "
+                init_available_moves
                 echo -e "${YELLOW}Game has been reset.${NC}"
             fi
             ;;
@@ -117,7 +126,6 @@ start_board_listener() {
     echo $! > .mqtt_listener_pid
 
     # Initial board display
-    update_board "$topic" "$message"
     display_board
 }
 
@@ -177,12 +185,83 @@ play_random_game() {
     sleep 1
 
     # Start the board listener
-    start_board_listener
+    #start_board_listener
 
     while true; do
         random_move
         sleep 1  # Give time to see the board after each move
     done
+}
+
+# Initialize the grid of available moves
+init_available_moves() {
+    available_moves=()
+    for row in {1..3}; do
+        for col in {1..3}; do
+            available_moves+=("$row,$col")
+        done
+    done
+}
+
+# Remove a move from available moves
+remove_move() {
+    local move="$1"
+    local new_moves=()
+    for available in "${available_moves[@]}"; do
+        if [ "$available" != "$move" ]; then
+            new_moves+=("$available")
+        fi
+    done
+    available_moves=("${new_moves[@]}")
+}
+
+# Get random available move
+get_computer_move() {
+    if [ ${#available_moves[@]} -gt 0 ]; then
+        echo "${available_moves[RANDOM % ${#available_moves[@]}]}"
+    fi
+}
+
+# Auto-response play mode
+auto_response_play() {
+    #start_board_listener
+    init_available_moves
+
+    echo "Human vs Computer mode. You play as X, computer plays as O."
+    echo "Enter moves as row,column (e.g. 2,3) or 'r' to reset:"
+
+    local last_board="$BOARD_STATE"
+
+    while true; do
+        read -p "> " input
+
+        if [[ "$input" == "q" ]]; then
+            break
+        elif [[ "$input" == "r" ]]; then
+            publish_message "r"
+            echo "Game reset."
+            last_board="         "
+            init_available_moves
+        else
+            if [[ "$input" =~ ^[1-3],[1-3]$ ]]; then
+                remove_move "$input"
+
+                publish_message "$input"
+                sleep 1
+
+                computer_move=$(get_computer_move)
+                if [ ! -z "$computer_move" ]; then
+                    echo "Computer plays: $computer_move"
+                    remove_move "$computer_move"
+                    publish_message "$computer_move"
+                fi
+                last_board="$BOARD_STATE"
+            fi
+        fi
+        sleep 0.5
+    done
+
+    stop_board_listener
 }
 
 # Main menu
@@ -193,7 +272,8 @@ show_menu() {
     echo "1. Play with board display"
     echo "2. Reset game"
     echo "3. Randomize placement"
-    echo "4. Exit"
+    echo "4. Play against computer"
+    echo "5. Exit"
     echo -e "${YELLOW}===========================${NC}"
     echo -n "Enter your choice: "
 }
@@ -210,7 +290,7 @@ make_move() {
 # Interactive play with board display
 interactive_play() {
     # Start the board listener
-    start_board_listener
+    #start_board_listener
 
     echo "Interactive play mode. Press Ctrl+C to stop."
     echo "Enter moves as row,column (e.g. 2,3) or 'r' to reset:"
@@ -268,6 +348,9 @@ while true; do
             play_random_game
             ;;
         4)
+            auto_response_play
+            ;;
+        5)
             echo "Exiting..."
             exit 0
             ;;
