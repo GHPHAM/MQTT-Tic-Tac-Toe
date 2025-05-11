@@ -60,7 +60,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   // Convert payload to string
   String message = "";
-  for (int i = 0; i < length; i++) {
+  for (int i = 0; i < length; ++i) {
     message += (char)payload[i];
   }
   Serial.println(message);
@@ -286,7 +286,6 @@ void publishGameState() {
   // Publish board state
   String boardState = getBoardStateString();
   client.publish(topic_board_state, boardState.c_str());
-  Serial.println(boardState.c_str());
 
   // Publish current player
   String playerState = String(currentPlayer);
@@ -300,9 +299,9 @@ void publishGameState() {
 // Helper function to get a nicely formatted board representation
 String getFormattedBoardString() {
   String formatted = "\n";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; ++i) {
     formatted += " ";
-    for (int j = 0; j < 3; j++) {
+    for (int j = 0; j < 3; ++j) {
       formatted += board[i][j];
       if (j < 2) formatted += " | ";
     }
@@ -314,14 +313,14 @@ String getFormattedBoardString() {
 
 boolean checkWin() {
   // Check rows
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; ++i) {
     if (board[i][0] != ' ' && board[i][0] == board[i][1] && board[i][1] == board[i][2]) {
       return true;
     }
   }
 
   // Check columns
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; ++i) {
     if (board[0][i] != ' ' && board[0][i] == board[1][i] && board[1][i] == board[2][i]) {
       return true;
     }
@@ -340,8 +339,8 @@ boolean checkWin() {
 }
 
 boolean checkDraw() {
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
       if (board[i][j] == ' ') {
         return false;
       }
@@ -352,8 +351,8 @@ boolean checkDraw() {
 
 void resetGame() {
   // Reset the board
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
       board[i][j] = ' ';
     }
   }
@@ -387,8 +386,8 @@ void updateScores() {
 
 String getBoardStateString() {
   String state = "";
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
       state += board[i][j];
     }
   }
@@ -400,11 +399,11 @@ void printBoard() {
   Serial.println("  1 2 3");
   Serial.println(" -------");
 
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; ++i) {
     Serial.print(i + 1);
     Serial.print("|");
 
-    for (int j = 0; j < 3; j++) {
+    for (int j = 0; j < 3; ++j) {
       Serial.print(board[i][j]);
       Serial.print("|");
     }

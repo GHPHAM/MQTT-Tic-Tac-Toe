@@ -353,50 +353,42 @@ void updateBoard(const char *topic, const char *message) {
             }
         }
         displayBoard();
+        return;
     }
+
     // Check for current player updates
-    else {
-        snprintf(subTopic, sizeof(subTopic), "%s/player", MQTT_TOPIC);
-        if (strcmp(topic, subTopic) == 0) {
-            // Update current player
-            currentPlayer = message[0];
-            displayBoard();
+    snprintf(subTopic, sizeof(subTopic), "%s/player", MQTT_TOPIC);
+    if (strcmp(topic, subTopic) == 0) {
+        currentPlayer = message[0];
+        return;
+    }
+
+    // Check for game status updates
+    snprintf(subTopic, sizeof(subTopic), "%s/status", MQTT_TOPIC);
+    if (strcmp(topic, subTopic) == 0) {
+        if (strstr(message, "wins") != NULL) {
+            setConsoleColor(COLOR_GREEN);
+            printf("Player %s!\n", message);
+            resetConsoleColor();
         }
-        // Check for game status updates
-        else {
-            snprintf(subTopic, sizeof(subTopic), "%s/status", MQTT_TOPIC);
-            if (strcmp(topic, subTopic) == 0) {
-                // Game status updates
-                if (strstr(message, "wins") != NULL) {
-                    setConsoleColor(COLOR_GREEN);
-                    printf("Player %s!\n", message);
-                    resetConsoleColor();
-                    printf("Press Enter to continue...");
-                    getchar();
-                    displayBoard();
-                }
-                else if (strcmp(message, "draw") == 0) {
-                    setConsoleColor(COLOR_BLUE);
-                    printf("Game ended in a draw!\n");
-                    resetConsoleColor();
-                    printf("Press Enter to continue...");
-                    getchar();
-                    displayBoard();
-                }
-                else if (strcmp(message, "reset") == 0) {
-                    setConsoleColor(COLOR_YELLOW);
-                    printf("Game has been reset.\n");
-                    resetConsoleColor();
-                    displayBoard();
-                }
-            }
-            // Check for move updates
-            else if (strstr(topic, "/moves") != NULL) {
-                setConsoleColor(COLOR_BLUE);
-                printf("Move made: %s\n", message);
-                resetConsoleColor();
-            }
+        else if (strcmp(message, "draw") == 0) {
+            setConsoleColor(COLOR_BLUE);
+            printf("Game ended in a draw!\n");
+            resetConsoleColor();
         }
+        else if (strcmp(message, "reset") == 0) {
+            setConsoleColor(COLOR_YELLOW);
+            printf("Game has been reset.\n");
+            resetConsoleColor();
+        }
+        return;  // Let the board update handle the display
+    }
+
+    // Check for move updates
+    if (strstr(topic, "/moves") != NULL) {
+        setConsoleColor(COLOR_BLUE);
+        printf("Move made: %s\n", message);
+        resetConsoleColor();
     }
 }
 
