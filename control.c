@@ -7,6 +7,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <windows.h>
+#include <time.h>
 
 // Path to Mosquitto executables
 char mosquittoPath[] = "C:\\Progra~2\\mosquitto\\mosquitto_pub.exe";
@@ -23,6 +24,10 @@ char board[3][3] = {
     {' ', ' ', ' '}
 };
 char currentPlayer = 'X';
+char positions[9][4];  // Array to store position strings like "1,2"
+int current_index = 0;
+BOOL autoplay_enabled = FALSE;
+const int autoplay_delay = 500;
 
 // Color codes for Windows console
 #define COLOR_RED 12
@@ -47,6 +52,9 @@ DWORD WINAPI mqttListenerThread(LPVOID arg);
 void updateBoard(const char *topic, const char *message);
 void makeMove(int row, int col);
 void resetGame();
+void generateBoardPositions();
+void randomMove();
+void toggleAutoplay();
 
 // Set console text color
 void setConsoleColor(int color) {
@@ -105,7 +113,7 @@ void displayBoard() {
 
     printf("  +-----------+\n\n");
     printf("Enter move as 'row,col' (e.g. '1,3')\n");
-    printf("Or 'r' to reset, 'q' to quit\n\n");
+    printf("Or 'r' to reset, 'q' to quit, 'a' to automate\n\n");
 }
 
 // Publish a message to the MQTT broker
@@ -406,6 +414,53 @@ void resetGame() {
     Sleep(500);  // Give time for the board to update
 }
 
+// Generate all possible board positions in random order
+void generateBoardPositions() {
+    int index = 0;
+    // Create array of all positions
+    for (int i = 1; i <= 3; i++) {
+        for (int j = 1; j <= 3; j++) {
+            sprintf(positions[index], "%d,%d", i, j);
+            index++;
+        }
+    }
+
+    // Fisher-Yates shuffle
+    for (int i = 8; i > 0; i--) {
+        int j = rand() % (i + 1);
+        char temp[4];
+        strcpy(temp, positions[i]);
+        strcpy(positions[i], positions[j]);
+        strcpy(positions[j], temp);
+    }
+    current_index = 0;
+}
+
+// Make a random move
+void randomMove() {
+    // If all moves used, reset for next round
+    if (current_index >= 9) {
+        printf("All positions played. Restarting board...\n");
+        generateBoardPositions();
+    }
+    publishMessage(positions[current_index]);
+    printf("Random move sent: %s\n", positions[current_index]);
+    current_index++;
+    Sleep(1000);  // Wait a second between moves
+}
+
+// Toggle autoplay mode
+void toggleAutoplay() {
+    autoplay_enabled = !autoplay_enabled;
+    if (autoplay_enabled) {
+        srand(time(NULL));  // Initialize random seed
+        printf("Autoplay enabled\n");
+        generateBoardPositions();
+    } else {
+        printf("Autoplay disabled\n");
+    }
+}
+
 // Main function
 int main(int argc, char *argv[]) {
     char input[20];
@@ -420,23 +475,29 @@ int main(int argc, char *argv[]) {
     // Main game loop
     while (1) {
         displayBoard();
+
+        // Autoplay mode - make moves automatically
+        if (autoplay_enabled) {
+            randomMove();
+            Sleep(autoplay_delay);  // Delay between moves
+            continue;  // Skip manual input when in autoplay mode
+        }
+
+        // Manual input mode
         printf("> ");
         fgets(input, sizeof(input), stdin);
-
-        // Remove newline character
         input[strcspn(input, "\n")] = 0;
 
-        // Check for quit command
         if (input[0] == 'q' || input[0] == 'Q') {
             break;
         }
-        // Check for reset command
         else if (input[0] == 'r' || input[0] == 'R') {
             resetGame();
         }
-        // Process move command
+        else if (input[0] == 'a' || input[0] == 'A') {
+            toggleAutoplay();
+        }
         else if (sscanf(input, "%d,%d", &row, &col) == 2) {
-            // Validate input
             if (row >= 1 && row <= 3 && col >= 1 && col <= 3) {
                 makeMove(row, col);
             }
@@ -446,7 +507,7 @@ int main(int argc, char *argv[]) {
             }
         }
         else {
-            printf("Invalid input! Enter 'row,col', 'r' to reset, or 'q' to quit.\n");
+            printf("Invalid input! Enter 'row,col', 'r' to reset, 'a' to toggle autoplay, or 'q' to quit.\n");
             Sleep(1000);
         }
     }
